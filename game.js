@@ -65,6 +65,7 @@
     player: null,
     enemies: [],
     projectiles: [],
+    enemyProjectiles: [],
     effects: [],
     pickups: [],
     floatingTexts: [],
@@ -195,6 +196,7 @@
     state.player = createPlayer();
     state.enemies = [];
     state.projectiles = [];
+    state.enemyProjectiles = [];
     state.effects = [];
     state.pickups = [];
     state.floatingTexts = [];
@@ -227,6 +229,7 @@
       slime: { hp: 50, speed: 90, radius: 22, color: "#6ef0bf", value: 12 },
       bat: { hp: 30, speed: 180, radius: 16, color: "#9f94ff", value: 14 },
       skeleton: { hp: 80, speed: 90, radius: 24, color: "#ffe0ac", value: 22 },
+      mage: { hp: 58, speed: 90, radius: 20, color: "#ff7a8f", value: 24 },
     }[type];
     const hp = Math.round(base.hp * Math.pow(WAVE_HP_SCALING, waveScale));
     const speed = base.speed * Math.pow(WAVE_SPEED_SCALING, waveScale);
@@ -245,7 +248,7 @@
       value: base.value,
       hitFlash: 0,
       wobble: random(0, TAU),
-      attackTimer: random(0.6, 1.6),
+      attackTimer: type === "mage" ? random(1.1, 2) : random(0.6, 1.6),
     };
   }
 
@@ -253,15 +256,18 @@
     const nextEnemies = [];
     const arena = getArenaBounds();
     state.projectiles = [];
+    state.enemyProjectiles = [];
     state.pickups = [];
     state.roomActive = true;
     state.roomCooldown = 0;
     state.effects.push({ type: "pulse", x: state.worldWidth / 2, y: state.playfieldTop + (state.worldHeight - state.playfieldTop) / 2, life: 0.7, maxLife: 0.7, radius: 36, maxRadius: 220, color: "103,215,255" });
-    let budget = 5 + roomNumber * 2;
+    let budget = 5 + roomNumber * 4;
     while (budget > 0) {
       const roll = Math.random();
-      const type = roll < 0.42 ? "slime" : roll < 0.72 ? "bat" : "skeleton";
-      const cost = type === "skeleton" ? 2 : 1;
+      const type = roomNumber >= 3
+        ? (roll < 0.3 ? "slime" : roll < 0.54 ? "bat" : roll < 0.82 ? "skeleton" : "mage")
+        : (roll < 0.42 ? "slime" : roll < 0.72 ? "bat" : "skeleton");
+      const cost = type === "skeleton" ? 2 : type === "mage" ? 2 : 1;
       if (budget - cost < 0) {
         continue;
       }
@@ -526,6 +532,41 @@
     }
   }
 
+  function spawnEnemyProjectile(enemy, player) {
+    const dir = normalized(player.x - enemy.x, player.y - enemy.y);
+    state.enemyProjectiles.push({
+      x: enemy.x + dir.x * 18,
+      y: enemy.y + dir.y * 18,
+      vx: dir.x * 360,
+      vy: dir.y * 360,
+      life: 1.8,
+      radius: 8,
+      damage: 14,
+      color: "#ff5d73",
+    });
+    spawnEffect("pulse", enemy.x, enemy.y, "255,93,115");
+    playBeep(260, 0.04, "sawtooth", 0.018);
+  }
+
+  function updateEnemyProjectiles(dt) {
+    const player = state.player;
+    for (let i = state.enemyProjectiles.length - 1; i >= 0; i -= 1) {
+      const projectile = state.enemyProjectiles[i];
+      projectile.x += projectile.vx * dt;
+      projectile.y += projectile.vy * dt;
+      projectile.life -= dt;
+      if (projectile.life <= 0 || projectile.x < -80 || projectile.x > state.worldWidth + 80 || projectile.y < -80 || projectile.y > state.worldHeight + 80) {
+        state.enemyProjectiles.splice(i, 1);
+        continue;
+      }
+      if (Math.hypot(projectile.x - player.x, projectile.y - player.y) < projectile.radius + player.radius) {
+        takeDamage(projectile.damage);
+        spawnEffect("pulse", projectile.x, projectile.y, "255,93,115");
+        state.enemyProjectiles.splice(i, 1);
+      }
+    }
+  }
+
   function canAttackCurrentAim(player) {
     if (!ATTACK_ONLY_WHEN_AIMING_AT_ENEMY) {
       return true;
@@ -555,6 +596,16 @@
         enemy.wobble += dt * 9;
         enemy.vx += (toPlayer.x * enemy.speed + Math.cos(enemy.wobble) * 120) * dt;
         enemy.vy += (toPlayer.y * enemy.speed + Math.sin(enemy.wobble * 1.2) * 120) * dt;
+      } else if (enemy.type === "mage") {
+        const distance = Math.hypot(player.x - enemy.x, player.y - enemy.y);
+        const retreat = distance < 240 ? -1 : distance > 340 ? 1 : 0;
+        const orbit = { x: -toPlayer.y, y: toPlayer.x };
+        enemy.vx += (toPlayer.x * enemy.speed * retreat + orbit.x * 42) * dt;
+        enemy.vy += (toPlayer.y * enemy.speed * retreat + orbit.y * 42) * dt;
+        if (enemy.attackTimer <= 0 && distance < 560) {
+          enemy.attackTimer = 1.8;
+          spawnEnemyProjectile(enemy, player);
+        }
       } else {
         const orbit = { x: -toPlayer.y, y: toPlayer.x };
         enemy.vx += (toPlayer.x * enemy.speed + orbit.x * 34) * dt;
@@ -567,7 +618,7 @@
       enemy.x = clamp(enemy.x, arena.left, arena.right);
       enemy.y = clamp(enemy.y, arena.top, arena.bottom);
 
-      const hitDistance = enemy.radius + player.radius - (enemy.type === "bat" ? 8 : 0);
+      const hitDistance = enemy.radius + player.radius - (enemy.type === "bat" ? 8 : enemy.type === "mage" ? 18 : 0);
       if (Math.hypot(enemy.x - player.x, enemy.y - player.y) < hitDistance && enemy.attackTimer <= 0) {
         enemy.attackTimer = enemy.type === "bat" ? 1.1 : 0.95;
         takeDamage(enemy.type === "skeleton" ? 16 : enemy.type === "bat" ? 10 : 12);
@@ -693,6 +744,7 @@
     }
 
     updateProjectiles(dt);
+    updateEnemyProjectiles(dt);
     updateEnemies(dt);
     updatePickups(dt);
     updateEffects(dt);
@@ -795,6 +847,23 @@
         ctx.quadraticCurveTo(6, 4, 0, 10);
         ctx.quadraticCurveTo(-6, 4, -enemy.radius, 0);
         ctx.fill();
+      } else if (enemy.type === "mage") {
+        ctx.beginPath();
+        ctx.roundRect(-enemy.radius + 2, -enemy.radius + 4, enemy.radius * 2 - 4, enemy.radius * 2 - 8, 12);
+        ctx.fill();
+        ctx.fillStyle = enemy.hitFlash > 0 ? "#ffffff" : "#ffd9df";
+        ctx.beginPath();
+        ctx.arc(0, -4, 8, 0, TAU);
+        ctx.fill();
+        ctx.fillStyle = "#2d1430";
+        ctx.fillRect(-10, 8, 20, 6);
+        ctx.strokeStyle = "#ff5d73";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(-8, -enemy.radius + 2);
+        ctx.lineTo(0, -enemy.radius - 10);
+        ctx.lineTo(8, -enemy.radius + 2);
+        ctx.stroke();
       } else {
         ctx.beginPath();
         ctx.roundRect(-enemy.radius, -enemy.radius, enemy.radius * 2, enemy.radius * 2, 10);
@@ -821,6 +890,22 @@
       ctx.arc(projectile.x, projectile.y, projectile.radius * 1.6, 0, TAU);
       ctx.fill();
       ctx.fillStyle = "#67d7ff";
+      ctx.beginPath();
+      ctx.arc(projectile.x, projectile.y, projectile.radius, 0, TAU);
+      ctx.fill();
+    }
+  }
+
+  function drawEnemyProjectiles() {
+    for (const projectile of state.enemyProjectiles) {
+      const gradient = ctx.createRadialGradient(projectile.x, projectile.y, 2, projectile.x, projectile.y, projectile.radius * 1.8);
+      gradient.addColorStop(0, "rgba(255,255,255,0.9)");
+      gradient.addColorStop(1, "rgba(255,93,115,0)");
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(projectile.x, projectile.y, projectile.radius * 1.8, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = projectile.color;
       ctx.beginPath();
       ctx.arc(projectile.x, projectile.y, projectile.radius, 0, TAU);
       ctx.fill();
@@ -898,6 +983,7 @@
     drawDungeon();
     drawPickups();
     drawProjectiles();
+    drawEnemyProjectiles();
     drawEnemies();
     drawPlayer();
     drawEffects();
