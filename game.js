@@ -37,6 +37,10 @@
   const ROOM_TARGET = 6;
   const WORLD_BASE = { width: 1600, height: 900 };
   const TAU = Math.PI * 2;
+  const ATTACK_ONLY_WHEN_AIMING_AT_ENEMY = true;
+  const ATTACK_AIM_CONE = 0.92;
+  const WAVE_HP_SCALING = 1.14;
+  const WAVE_SPEED_SCALING = 1.08;
 
   const input = {
     keys: new Set(),
@@ -170,13 +174,13 @@
       level: 1,
       xp: 0,
       xpToLevel: 70,
-      attackCooldown: 0.42,
+      attackCooldown: 1,
       attackTimer: 0.12,
       damage: 24,
-      projectileSpeed: 760,
+      projectileSpeed: 500,
       projectileLife: 0.52,
-      projectileSize: 17,
-      pickupRadius: 110,
+      projectileSize: 7,
+      pickupRadius: 70,
       invuln: 0,
       flash: 0,
       facing: { x: 1, y: 0 },
@@ -214,11 +218,14 @@
     if (side === 2) { x = random(80, state.worldWidth - 80); y = state.worldHeight - 80; }
     if (side === 3) { x = 80; y = random(arena.top, state.worldHeight - 80); }
 
+    const waveScale = roomNumber - 1;
     const base = {
-      slime: { hp: 42 + roomNumber * 5, speed: 72 + roomNumber * 3, radius: 22, color: "#6ef0bf", value: 12 },
-      bat: { hp: 26 + roomNumber * 3, speed: 150 + roomNumber * 5, radius: 16, color: "#9f94ff", value: 14 },
-      skeleton: { hp: 70 + roomNumber * 8, speed: 90 + roomNumber * 4, radius: 24, color: "#ffe0ac", value: 22 },
+      slime: { hp: 50, speed: 90, radius: 22, color: "#6ef0bf", value: 12 },
+      bat: { hp: 30, speed: 180, radius: 16, color: "#9f94ff", value: 14 },
+      skeleton: { hp: 80, speed: 90, radius: 24, color: "#ffe0ac", value: 22 },
     }[type];
+    const hp = Math.round(base.hp * Math.pow(WAVE_HP_SCALING, waveScale));
+    const speed = base.speed * Math.pow(WAVE_SPEED_SCALING, waveScale);
 
     return {
       type,
@@ -226,9 +233,9 @@
       y,
       vx: 0,
       vy: 0,
-      hp: base.hp,
-      maxHp: base.hp,
-      speed: base.speed,
+      hp,
+      maxHp: hp,
+      speed,
       radius: base.radius,
       color: base.color,
       value: base.value,
@@ -494,6 +501,21 @@
     }
   }
 
+  function canAttackCurrentAim(player) {
+    if (!ATTACK_ONLY_WHEN_AIMING_AT_ENEMY) {
+      return true;
+    }
+    for (const enemy of state.enemies) {
+      const toEnemy = normalized(enemy.x - player.x, enemy.y - player.y);
+      const alignment = player.facing.x * toEnemy.x + player.facing.y * toEnemy.y;
+      const distance = Math.hypot(enemy.x - player.x, enemy.y - player.y);
+      if (alignment >= ATTACK_AIM_CONE && distance <= 560) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   function updateEnemies(dt) {
     const player = state.player;
     const arena = getArenaBounds();
@@ -532,6 +554,9 @@
     const player = state.player;
     for (let i = state.pickups.length - 1; i >= 0; i -= 1) {
       const pickup = state.pickups[i];
+      if (!pickup) {
+        continue;
+      }
       pickup.life -= dt;
       if (pickup.type !== "portal") {
         const floatingPickup = pickup.type === "xp" || pickup.type === "coin";
@@ -577,7 +602,7 @@
         } else if (pickup.type === "portal" && state.roomCooldown <= 0) {
           state.pickups.splice(i, 1);
           spawnRoom(state.room);
-          continue;
+          return;
         }
         state.pickups.splice(i, 1);
       }
@@ -638,7 +663,7 @@
     }
 
     player.attackTimer -= dt;
-    if (Math.hypot(player.facing.x, player.facing.y) > 0.3 && player.attackTimer <= 0) {
+    if (Math.hypot(player.facing.x, player.facing.y) > 0.3 && player.attackTimer <= 0 && canAttackCurrentAim(player)) {
       attack();
     }
 
