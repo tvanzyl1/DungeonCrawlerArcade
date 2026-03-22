@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Relic Delve</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Nunito:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <canvas id="gameCanvas" aria-label="Relic Delve game area"></canvas>
+
+    <header class="hud">
+      <div class="hud-panel hud-left">
+        <div class="stat-block">
+          <span class="stat-label">Vitality</span>
+          <div class="meter"><div class="meter-fill health-fill" id="healthFill"></div></div>
+          <span class="stat-value" id="healthText">100 / 100</span>
+        </div>
+        <div class="stat-block">
+          <span class="stat-label">Renown</span>
+          <div class="meter"><div class="meter-fill xp-fill" id="xpFill"></div></div>
+          <span class="stat-value" id="levelText">Level 1</span>
+        </div>
+      </div>
+
+      <div class="hud-panel hud-center">
+        <div class="hero-badge">Relic Delve</div>
+        <div class="run-line" id="weaponText">Moonsteel Arc</div>
+      </div>
+
+      <div class="hud-panel hud-right">
+        <div class="score-line"><span>Depth</span><strong id="roomText">1 / 6</strong></div>
+        <div class="score-line"><span>Coins</span><strong id="coinsText">0</strong></div>
+        <div class="score-line"><span>Score</span><strong id="scoreText">0</strong></div>
+        <button id="pauseButton" class="icon-button" type="button" aria-label="Pause game">II</button>
+      </div>
+    </header>
+
+    <div class="overlay-layer">
+      <section class="overlay-card active" id="menuOverlay">
+        <p class="eyebrow">Arcade Fantasy Run</p>
+        <h1>Relic Delve</h1>
+        <p class="subtitle">Torchlit rooms, rude skeletons, and one very overqualified enchanted sword.</p>
+        <div class="menu-grid">
+          <div class="info-card">
+            <h2>Desktop</h2>
+            <p><strong>WASD</strong> to move</p>
+            <p><strong>Mouse</strong> to aim</p>
+            <p>Your blade fires itself. Very helpful.</p>
+          </div>
+          <div class="info-card">
+            <h2>Touch</h2>
+            <p><strong>Left stick</strong> to move</p>
+            <p><strong>Right stick</strong> to aim</p>
+            <p>Keep your thumbs low and your bravery unreasonable.</p>
+          </div>
+        </div>
+        <div class="button-row">
+          <button id="playButton" class="primary-button" type="button">Start Run</button>
+          <button id="muteButton" class="secondary-button" type="button">Soundless Hall: Off</button>
+        </div>
+      </section>
+
+      <section class="overlay-card hidden" id="pauseOverlay">
+        <p class="eyebrow">Breathing Break</p>
+        <h2>Paused</h2>
+        <p>Nothing in the dungeon respects work-life balance.</p>
+        <div class="button-column">
+          <button id="resumeButton" class="primary-button" type="button">Resume</button>
+          <button id="restartButtonPause" class="secondary-button" type="button">Restart Run</button>
+          <button id="menuButtonPause" class="secondary-button" type="button">Back To Menu</button>
+        </div>
+      </section>
+
+      <section class="overlay-card hidden" id="upgradeOverlay">
+        <p class="eyebrow">Relic Choice</p>
+        <h2>Choose An Upgrade</h2>
+        <p class="subtitle">The dungeon offers gifts. Mostly because it expects a dramatic payoff later.</p>
+        <div class="upgrade-grid" id="upgradeGrid"></div>
+      </section>
+
+      <section class="overlay-card hidden" id="resultOverlay">
+        <p class="eyebrow" id="resultEyebrow">Expedition End</p>
+        <h2 id="resultTitle">Run Complete</h2>
+        <p class="subtitle" id="resultSubtitle">You made the dungeon blink first.</p>
+        <div class="result-stats" id="resultStats"></div>
+        <div class="button-column">
+          <button id="retryButton" class="primary-button" type="button">Run Again</button>
+          <button id="menuButtonResult" class="secondary-button" type="button">Main Menu</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="touch-controls hidden" id="touchControls" aria-hidden="true">
+      <div class="touch-stick" id="moveStick">
+        <div class="touch-stick-base"></div>
+        <div class="touch-stick-knob"></div>
+        <span>Move</span>
+      </div>
+      <div class="touch-stick aim-stick" id="aimStick">
+        <div class="touch-stick-base"></div>
+        <div class="touch-stick-knob"></div>
+        <span>Aim</span>
+      </div>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
