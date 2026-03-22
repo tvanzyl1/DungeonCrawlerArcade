@@ -66,6 +66,7 @@
     enemies: [],
     projectiles: [],
     enemyProjectiles: [],
+    obstacles: [],
     effects: [],
     pickups: [],
     floatingTexts: [],
@@ -151,6 +152,62 @@
     };
   }
 
+  function clampCircleToObstacle(entity, obstacle) {
+    const nearestX = clamp(entity.x, obstacle.x, obstacle.x + obstacle.width);
+    const nearestY = clamp(entity.y, obstacle.y, obstacle.y + obstacle.height);
+    const dx = entity.x - nearestX;
+    const dy = entity.y - nearestY;
+    const dist = Math.hypot(dx, dy);
+    if (dist === 0) {
+      entity.y = obstacle.y - entity.radius;
+      return true;
+    }
+    if (dist < entity.radius) {
+      const overlap = entity.radius - dist;
+      entity.x += (dx / dist) * overlap;
+      entity.y += (dy / dist) * overlap;
+      return true;
+    }
+    return false;
+  }
+
+  function projectileHitsObstacle(projectile) {
+    return state.obstacles.some((obstacle) => {
+      const nearestX = clamp(projectile.x, obstacle.x, obstacle.x + obstacle.width);
+      const nearestY = clamp(projectile.y, obstacle.y, obstacle.y + obstacle.height);
+      return Math.hypot(projectile.x - nearestX, projectile.y - nearestY) < projectile.radius;
+    });
+  }
+
+  function generateObstacles(roomNumber) {
+    const arena = getArenaBounds();
+    const obstacles = [];
+    const count = Math.min(2 + Math.floor(roomNumber / 2), 5);
+    for (let attempt = 0; attempt < 24 && obstacles.length < count; attempt += 1) {
+      const width = random(64, 120);
+      const height = random(64, 120);
+      const obstacle = {
+        x: random(arena.left + 40, arena.right - width - 40),
+        y: random(arena.top + 40, arena.bottom - height - 40),
+        width,
+        height,
+      };
+      const centerX = obstacle.x + obstacle.width / 2;
+      const centerY = obstacle.y + obstacle.height / 2;
+      const tooCloseToPlayerSpawn = Math.hypot(centerX - state.worldWidth / 2, centerY - (arena.top + (arena.bottom - arena.top) / 2)) < 170;
+      const tooCloseToPortalLane = Math.abs(centerX - state.worldWidth / 2) < 90 && obstacle.y < arena.top + 150;
+      const overlapsObstacle = obstacles.some((other) =>
+        obstacle.x < other.x + other.width + 28
+        && obstacle.x + obstacle.width + 28 > other.x
+        && obstacle.y < other.y + other.height + 28
+        && obstacle.y + obstacle.height + 28 > other.y);
+      if (!tooCloseToPlayerSpawn && !tooCloseToPortalLane && !overlapsObstacle) {
+        obstacles.push(obstacle);
+      }
+    }
+    return obstacles;
+  }
+
   function updateTouchVisibility() {
     const show = touchMode || deviceHasTouchSupport();
     ui.touchControls.classList.toggle("hidden", !show);
@@ -197,6 +254,7 @@
     state.enemies = [];
     state.projectiles = [];
     state.enemyProjectiles = [];
+    state.obstacles = [];
     state.effects = [];
     state.pickups = [];
     state.floatingTexts = [];
@@ -257,6 +315,7 @@
     const arena = getArenaBounds();
     state.projectiles = [];
     state.enemyProjectiles = [];
+    state.obstacles = generateObstacles(roomNumber);
     state.pickups = [];
     state.roomActive = true;
     state.roomCooldown = 0;
@@ -505,6 +564,11 @@
         state.projectiles.splice(i, 1);
         continue;
       }
+      if (projectileHitsObstacle(projectile)) {
+        spawnEffect("pulse", projectile.x, projectile.y, "103,215,255");
+        state.projectiles.splice(i, 1);
+        continue;
+      }
 
       for (let j = state.enemies.length - 1; j >= 0; j -= 1) {
         const enemy = state.enemies[j];
@@ -556,6 +620,11 @@
       projectile.y += projectile.vy * dt;
       projectile.life -= dt;
       if (projectile.life <= 0 || projectile.x < -80 || projectile.x > state.worldWidth + 80 || projectile.y < -80 || projectile.y > state.worldHeight + 80) {
+        state.enemyProjectiles.splice(i, 1);
+        continue;
+      }
+      if (projectileHitsObstacle(projectile)) {
+        spawnEffect("pulse", projectile.x, projectile.y, "255,93,115");
         state.enemyProjectiles.splice(i, 1);
         continue;
       }
@@ -617,6 +686,9 @@
       enemy.y += enemy.vy * dt;
       enemy.x = clamp(enemy.x, arena.left, arena.right);
       enemy.y = clamp(enemy.y, arena.top, arena.bottom);
+      for (const obstacle of state.obstacles) {
+        clampCircleToObstacle(enemy, obstacle);
+      }
 
       const hitDistance = enemy.radius + player.radius - (enemy.type === "bat" ? 8 : enemy.type === "mage" ? 18 : 0);
       if (Math.hypot(enemy.x - player.x, enemy.y - player.y) < hitDistance && enemy.attackTimer <= 0) {
@@ -733,6 +805,9 @@
     player.y += input.move.y * player.speed * dt;
     player.x = clamp(player.x, arena.left, arena.right);
     player.y = clamp(player.y, arena.top, arena.bottom);
+    for (const obstacle of state.obstacles) {
+      clampCircleToObstacle(player, obstacle);
+    }
 
     if (Math.hypot(input.aim.x, input.aim.y) > 0.15) {
       player.facing = normalized(input.aim.x, input.aim.y);
@@ -796,6 +871,22 @@
     ctx.strokeStyle = "rgba(171,206,255,0.18)";
     ctx.lineWidth = 12;
     ctx.strokeRect(24, borderTop, state.worldWidth - 48, state.worldHeight - borderTop - 24);
+  }
+
+  function drawObstacles() {
+    for (const obstacle of state.obstacles) {
+      ctx.fillStyle = "rgba(24, 29, 56, 0.95)";
+      ctx.strokeStyle = "rgba(171,206,255,0.16)";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.roundRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height, 18);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "rgba(255,255,255,0.04)";
+      ctx.beginPath();
+      ctx.roundRect(obstacle.x + 8, obstacle.y + 8, obstacle.width - 16, obstacle.height * 0.28, 12);
+      ctx.fill();
+    }
   }
 
   function drawPlayer() {
@@ -981,6 +1072,7 @@
     ctx.save();
     ctx.translate(state.width / 2 - camera.x, state.height / 2 - camera.y);
     drawDungeon();
+    drawObstacles();
     drawPickups();
     drawProjectiles();
     drawEnemyProjectiles();
