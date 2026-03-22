@@ -70,6 +70,8 @@
     floatingTexts: [],
     room: 1,
     roomCooldown: 0,
+    roomActive: false,
+    pendingRoom: null,
     score: 0,
     coins: 0,
     killCount: 0,
@@ -198,6 +200,8 @@
     state.floatingTexts = [];
     state.room = 1;
     state.roomCooldown = 0;
+    state.roomActive = true;
+    state.pendingRoom = null;
     state.score = 0;
     state.coins = 0;
     state.killCount = 0;
@@ -246,9 +250,12 @@
   }
 
   function spawnRoom(roomNumber) {
-    state.enemies = [];
+    const nextEnemies = [];
+    const arena = getArenaBounds();
     state.projectiles = [];
     state.pickups = [];
+    state.roomActive = true;
+    state.roomCooldown = 0;
     state.effects.push({ type: "pulse", x: state.worldWidth / 2, y: state.playfieldTop + (state.worldHeight - state.playfieldTop) / 2, life: 0.7, maxLife: 0.7, radius: 36, maxRadius: 220, color: "103,215,255" });
     let budget = 5 + roomNumber * 2;
     while (budget > 0) {
@@ -259,7 +266,22 @@
         continue;
       }
       budget -= cost;
-      state.enemies.push(createEnemy(type, roomNumber));
+      nextEnemies.push(createEnemy(type, roomNumber));
+    }
+    if (!nextEnemies.length) {
+      nextEnemies.push({
+        ...createEnemy("slime", roomNumber),
+        x: state.worldWidth / 2,
+        y: arena.top + (arena.bottom - arena.top) * 0.3,
+      });
+    }
+    state.enemies = nextEnemies.filter((enemy) => Number.isFinite(enemy.x) && Number.isFinite(enemy.y) && Number.isFinite(enemy.hp) && enemy.hp > 0);
+    if (!state.enemies.length) {
+      state.enemies = [{
+        ...createEnemy("slime", roomNumber),
+        x: state.worldWidth / 2,
+        y: arena.top + (arena.bottom - arena.top) * 0.3,
+      }];
     }
   }
 
@@ -400,6 +422,10 @@
   }
 
   function clearRoom() {
+    if (!state.roomActive) {
+      return;
+    }
+    state.roomActive = false;
     state.score += 100 + state.room * 30;
     state.roomClearFlash = 1;
     playBeep(1080, 0.09, "triangle", 0.03);
@@ -407,7 +433,6 @@
       finishRun(true);
       return;
     }
-    state.room += 1;
     state.roomCooldown = 2.2;
     state.pickups.push({ type: "portal", x: state.worldWidth / 2, y: state.playfieldTop + 74, vx: 0, vy: 0, radius: 24, value: 0, life: 999, color: "#8f83ff" });
   }
@@ -601,7 +626,7 @@
           spawnFloatingText(`+${pickup.value} hp`, pickup.x, pickup.y, "#ff8aa2");
         } else if (pickup.type === "portal" && state.roomCooldown <= 0) {
           state.pickups.splice(i, 1);
-          spawnRoom(state.room);
+          state.pendingRoom = state.room + 1;
           return;
         }
         state.pickups.splice(i, 1);
@@ -673,7 +698,15 @@
     updateEffects(dt);
     updateFloatingTexts(dt);
 
-    if (!state.enemies.length && state.roomCooldown <= 0 && !state.pickups.some((pickup) => pickup.type === "portal")) {
+    if (state.pendingRoom !== null) {
+      state.room = state.pendingRoom;
+      state.pendingRoom = null;
+      spawnRoom(state.room);
+      updateHud();
+      return;
+    }
+
+    if (state.roomActive && !state.enemies.length && state.roomCooldown <= 0 && !state.pickups.some((pickup) => pickup.type === "portal")) {
       clearRoom();
     }
     if (state.roomCooldown > 0) {
